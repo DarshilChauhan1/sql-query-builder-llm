@@ -6,6 +6,8 @@ import { JwtAuthModule } from './jwt-auth/jwt-auth.module';
 import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { MailModule } from './mail/mail.module';
+import { WorkspaceModule } from './workspace/workspace.module';
+import { ConversationsModule } from './conversations/conversations.module';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { MailModule } from './mail/mail.module';
     AuthModule,
     PrismaModule,
     MailModule,
+    WorkspaceModule,
+    ConversationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

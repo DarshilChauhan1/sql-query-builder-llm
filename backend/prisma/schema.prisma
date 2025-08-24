@@ -42,7 +42,7 @@ model Workspace {
   databaseConnection DatabaseConnection ?
   conversations Conversation[]
   name String
-  description String
+  description String ?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -52,6 +52,8 @@ model DatabaseConnection{
   workspaceId String @unique
   workspace Workspace @relation(fields: [workspaceId], references: [id])
   schema Json
+  connectionString String ?
+  dbType Dbtype @default(postgres)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -71,6 +73,7 @@ model Message {
   conversation Conversation @relation(fields: [conversationId], references: [id])
   role ChatRole
   sqlQuery String
+  prompt String
   queryResults Json ?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
