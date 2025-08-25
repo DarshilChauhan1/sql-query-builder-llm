@@ -89,6 +89,8 @@ export class AuthService {
       throw new BadRequestException('User does not exist');
     }
 
+    if(!existUser.isVerified) throw new BadRequestException('Email not verified. Please verify your email to login.');
+
     const isPasswordValid = await bcrypt.compare(password, existUser.password);
     if (!isPasswordValid) {
       throw new BadRequestException('Invalid password');
