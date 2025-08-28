@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* Dark theme root styles */
+:root {
+  color-scheme: dark;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
 /* GitHub-style animations */
 @keyframes fadeIn {
   from {
@@ -28,4 +37,29 @@
 
 .animate-shine {
   animation: shine 0.8s ease-out;
+}
+
+/* Dark theme scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Dark theme selection */
+::selection {
+  background: #3b82f6;
+  color: #ffffff;
 }

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { KeyboardEvent, ClipboardEvent } from 'react';
+import { useVerifyEmailMutation } from '../store/services/auth.service';
 
 interface OTPInputProps {
   length?: number;
@@ -9,6 +10,7 @@ interface OTPInputProps {
   error?: boolean;
   className?: string;
   placeholder?: string;
+  payload?: any; // Made optional
 }
 
 export const OTPInput: React.FC<OTPInputProps> = ({
@@ -24,6 +26,9 @@ export const OTPInput: React.FC<OTPInputProps> = ({
   const [activeIndex, setActiveIndex] = useState<number>(0);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
+
+  const [verifyEmail, { isLoading }] = useVerifyEmailMutation()
+
   // Focus on first input when component mounts
   useEffect(() => {
     if (inputRefs.current[0]) {
@@ -37,7 +42,7 @@ export const OTPInput: React.FC<OTPInputProps> = ({
 
     // Only allow numbers
     const sanitizedValue = value.replace(/[^0-9]/g, '');
-    
+
     if (sanitizedValue.length <= 1) {
       const newOtp = [...otp];
       newOtp[index] = sanitizedValue;
@@ -93,22 +98,22 @@ export const OTPInput: React.FC<OTPInputProps> = ({
     if (disabled) return;
 
     const pastedData = e.clipboardData.getData('text/plain').replace(/[^0-9]/g, '');
-    
+
     if (pastedData.length <= length) {
       const newOtp = new Array(length).fill('');
-      
+
       for (let i = 0; i < pastedData.length; i++) {
         newOtp[i] = pastedData[i];
       }
-      
+
       setOtp(newOtp);
       onChangeOTP?.(newOtp.join(''));
-      
+
       // Focus on the last filled input or complete if all filled
       const lastFilledIndex = Math.min(pastedData.length - 1, length - 1);
       setActiveIndex(lastFilledIndex);
       inputRefs.current[lastFilledIndex]?.focus();
-      
+
       if (pastedData.length === length) {
         onComplete(pastedData);
       }
@@ -151,32 +156,35 @@ export const OTPInput: React.FC<OTPInputProps> = ({
             placeholder={placeholder}
             className={`
               w-12 h-12 text-center text-lg font-semibold border-2 rounded-lg
+              bg-white dark:bg-slate-800
+              text-gray-900 dark:text-slate-100
               transition-all duration-200 ease-in-out
               focus:outline-none focus:ring-2 focus:ring-offset-2
+              focus:ring-offset-white dark:focus:ring-offset-slate-900
               ${error
-                ? 'border-red-300 focus:border-red-500 focus:ring-red-500 bg-red-50'
+                ? 'border-red-300 dark:border-red-600 focus:border-red-500 focus:ring-red-500 bg-red-50 dark:bg-red-900/20'
                 : activeIndex === index
-                ? 'border-blue-500 focus:border-blue-500 focus:ring-blue-500 bg-blue-50'
-                : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500 hover:border-gray-400'
+                  ? 'border-blue-500 focus:border-blue-500 focus:ring-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                  : 'border-gray-300 dark:border-slate-600 focus:border-blue-500 focus:ring-blue-500 hover:border-gray-400 dark:hover:border-slate-500'
               }
               ${disabled
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-white text-gray-900'
+                ? 'bg-gray-100 dark:bg-slate-700 text-gray-400 dark:text-slate-500 cursor-not-allowed'
+                : 'bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100'
               }
               transform hover:scale-105 focus:scale-105
-              ${digit ? 'border-blue-400 bg-blue-50' : ''}
+              ${digit ? 'border-blue-400 dark:border-blue-500 bg-blue-50 dark:bg-blue-900/20' : ''}
             `}
             aria-label={`Digit ${index + 1} of ${length}`}
           />
         ))}
       </div>
-      
+
       {/* Clear button */}
       {otp.some(digit => digit !== '') && !disabled && (
         <button
           type="button"
           onClick={clearOTP}
-          className="text-sm text-gray-500 hover:text-gray-700 transition-colors duration-200 underline"
+          className="text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300 transition-colors duration-200 underline"
         >
           Clear
         </button>
@@ -221,10 +229,10 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
   };
 
   return (
-    <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-lg border border-gray-200">
+    <div className="max-w-md mx-auto p-6 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-gray-200 dark:border-slate-700">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">{title}</h2>
-        <p className="text-gray-600">{subtitle}</p>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-2">{title}</h2>
+        <p className="text-gray-600 dark:text-slate-400">{subtitle}</p>
       </div>
 
       <div className="mb-6">
@@ -235,9 +243,9 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
           disabled={isLoading}
           error={!!error}
         />
-        
+
         {error && (
-          <p className="text-red-600 text-sm text-center mt-3 animate-fadeIn">
+          <p className="text-red-600 dark:text-red-400 text-sm text-center mt-3 animate-fadeIn">
             {error}
           </p>
         )}
@@ -251,11 +259,12 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
           className={`
             w-full py-2.5 px-4 border border-transparent rounded-md text-sm font-medium
             transition-all duration-200 ease-in-out
+            focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
+            focus:ring-offset-white dark:focus:ring-offset-slate-800
             ${currentOTP.length === length && !isLoading
               ? 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg transform hover:scale-[1.02]'
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : 'bg-gray-300 dark:bg-slate-600 text-gray-500 dark:text-slate-400 cursor-not-allowed'
             }
-            focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
           `}
         >
           {isLoading ? (
@@ -280,8 +289,8 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
               className={`
                 text-sm transition-colors duration-200
                 ${resendDisabled
-                  ? 'text-gray-400 cursor-not-allowed'
-                  : 'text-blue-600 hover:text-blue-700 underline'
+                  ? 'text-gray-400 dark:text-slate-500 cursor-not-allowed'
+                  : 'text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline'
                 }
               `}
             >

@@ -79,6 +79,13 @@ export const useToastUtils = () => {
       toast.warning('Your session has expired. Please log in again.'),
   };
 
+  const commonToasts = {
+    success : (message: string) =>
+      toast.success(message),
+    error : (message: string) =>
+      toast.error(message)
+  }
+
   // Data operation helpers
   const dataToasts = {
     saveSuccess: (itemName?: string) =>
@@ -141,6 +148,7 @@ export const useToastUtils = () => {
     handleApiResponse,
     handleFormSubmit,
     auth: authToasts,
+    commonToasts: commonToasts,
     data: dataToasts,
     network: networkToasts,
     validation: validationToasts,

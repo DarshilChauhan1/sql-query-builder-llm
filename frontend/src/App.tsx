@@ -1,14 +1,14 @@
 import { Provider } from 'react-redux';
 import { store } from './store';
 import { AppRouter } from './routes/AppRouter';
-import { AuthToastProvider } from './contexts/AuthToastContext';
+import { ToastProvider } from './contexts/ToastContext';
 
 function App() {
   return (
     <Provider store={store}>
-      <AuthToastProvider>
+      <ToastProvider>
         <AppRouter />
-      </AuthToastProvider>
+      </ToastProvider>
     </Provider>
   );
 }

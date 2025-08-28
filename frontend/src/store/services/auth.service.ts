@@ -10,19 +10,39 @@ interface User {
     id: string;
     name: string;
     email: string;
+    isVerified?: boolean;
 }
 
 interface AuthLoginResponse {
     user: User;
-    token: string;
+    token: {
+        accessToken: string;
+        refreshToken: string;
+    };
 }
+
+interface RegisterDataResponse {
+    email: string,
+    hash: string,
+    otpExpiry: string
+}
+
+interface VerifyEmailRequest {
+    otp: string,
+    name: string,
+    hash: string,
+    otpExpiry: string,
+    email: string,
+    password: string
+}
+
 
 export const authService = createApi({
     reducerPath: 'authApi',
     baseQuery: fetchBaseQuery({
         baseUrl: import.meta.env.VITE_API_URL || 'http://localhost:4000/api/v1',
         prepareHeaders: (headers) => {
-            const token = localStorage.getItem('token');
+            const token = localStorage.getItem('accessToken');
             if (token) {
                 headers.set('Authorization', `Bearer ${token}`);
             }
@@ -40,15 +60,22 @@ export const authService = createApi({
             }),
             invalidatesTags: ['Auth']
         }),
-        register: builder.mutation<ResponseInterface<AuthLoginResponse>, { name: string; email: string; password: string }>({
+        register: builder.mutation<ResponseInterface<RegisterDataResponse>, { email: string; }>({
             query: (payload) => ({
                 url: '/auth/sign-up',
                 method: 'POST',
                 body: payload,
             }),
             invalidatesTags: ['Auth']
+        }),
+        verifyEmail: builder.mutation<ResponseInterface<AuthLoginResponse>, VerifyEmailRequest>({
+            query: (payload) => ({
+                url: '/auth/verify-email',
+                method: 'POST',
+                body: payload
+            })
         })
     })
 });
 
-export const { useLoginMutation, useRegisterMutation } = authService;
+export const { useLoginMutation, useRegisterMutation, useVerifyEmailMutation } = authService;

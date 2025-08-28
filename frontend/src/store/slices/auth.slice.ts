@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
-import { authService } from "./auth.service";
+import { authService } from "../services/auth.service";
 
 // Types
 interface User {
@@ -11,7 +11,8 @@ interface User {
 
 interface AuthState {
     user: User | null;
-    token: string | null;
+    accessToken: string | null;
+    refreshToken: string | null;
     isAuthenticated: boolean;
     isLoading: boolean;
     error: string | null;
@@ -19,14 +20,29 @@ interface AuthState {
 
 // Initialize state with token validation
 const getInitialState = (): AuthState => {
-    const token = localStorage.getItem('token');
+    const accessToken = localStorage.getItem('accessToken');
+    const refreshToken = localStorage.getItem('refreshToken');
+    const userString = localStorage.getItem('user');
     
     let user: User | null = null;
     let isAuthenticated = false;
 
+    if (accessToken && userString) {
+        try {
+            user = JSON.parse(userString);
+            isAuthenticated = true;
+        } catch (error) {
+            // Invalid user data, clear storage
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem('user');
+        }
+    }
+
     return {
         user,
-        token: isAuthenticated ? token : null,
+        accessToken: isAuthenticated ? accessToken : null,
+        refreshToken: isAuthenticated ? refreshToken : null,
         isAuthenticated,
         isLoading: false,
         error: null
@@ -40,15 +56,20 @@ const authSlice = createSlice({
     initialState,
     reducers: {
         // Set user credentials
-        setCredentials: (state, action: PayloadAction<{ user: User; token: string }>) => {
+        setCredentials: (state, action: PayloadAction<{ user: User; token: {
+            accessToken: string;
+            refreshToken: string;
+        } }>) => {
             const { user, token } = action.payload;
             state.user = user;
-            state.token = token;
+            state.accessToken = token.accessToken;
+            state.refreshToken = token.refreshToken;
             state.isAuthenticated = true;
             state.error = null;
             
             // Persist to localStorage
-            localStorage.setItem('token', token);
+            localStorage.setItem('accessToken', token.accessToken);
+            localStorage.setItem('refreshToken', token.refreshToken);
             localStorage.setItem('user', JSON.stringify(user));
             localStorage.setItem('lastActivity', Date.now().toString());
         },
@@ -56,14 +77,16 @@ const authSlice = createSlice({
         // Clear credentials and logout
         clearCredentials: (state) => {
             state.user = null;
-            state.token = null;
+            state.accessToken = null;
+            state.refreshToken = null;
             state.isAuthenticated = false;
             state.error = null;
             
             // Clear localStorage
-            localStorage.removeItem('token');
             localStorage.removeItem('user');
             localStorage.removeItem('lastActivity');
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
         },
 
         // Update user profile
@@ -87,35 +110,25 @@ const authSlice = createSlice({
     extraReducers: (builder) => {
         // Handle login states
         builder
-            .addMatcher(authService.endpoints.login.matchPending, (state) => {
-                state.isLoading = true;
-                state.error = null;
-            })
-            .addMatcher(authService.endpoints.login.matchFulfilled, (state, action) => {
+            .addMatcher(authService.endpoints.verifyEmail.matchFulfilled, (state, action) => {
                 state.isLoading = false;
                 
-                // Check if login was successful
+                // Check if verification was successful
                 if (action.payload.success && action.payload.data) {
-                    const { user, token } = action.payload.data;
+                    const { token, user } = action.payload.data;
                     state.user = user;
-                    state.token = token;
-                    state.isAuthenticated = true;
+                    state.accessToken = token.accessToken;
+                    state.refreshToken = token.refreshToken;
                     state.error = null;
-                    
+                    state.isAuthenticated = true;
                     // Persist to localStorage
-                    localStorage.setItem('token', token);
+                    localStorage.setItem('accessToken', token.accessToken);
+                    localStorage.setItem('refreshToken', token.refreshToken);
                     localStorage.setItem('user', JSON.stringify(user));
                 } else {
-                    state.error = action.payload.message || 'Login failed';
+                    state.error = action.payload.message || 'Verification failed';
                 }
             })
-            .addMatcher(authService.endpoints.login.matchRejected, (state, action) => {
-                state.isLoading = false;
-                state.error = action.error?.message || 'Login failed. Please try again.';
-                state.isAuthenticated = false;
-                state.user = null;
-                state.token = null;
-            });
     },
 });
 
@@ -131,7 +144,8 @@ export default authSlice.reducer;
 
 // Selectors
 export const selectCurrentUser = (state: { auth: AuthState }) => state.auth.user;
-export const selectToken = (state: { auth: AuthState }) => state.auth.token;
+export const selectAccessToken = (state: { auth: AuthState }) => state.auth.accessToken;
+export const selectRefreshToken = (state: { auth: AuthState }) => state.auth.refreshToken;
 export const selectIsAuthenticated = (state: { auth: AuthState }) => state.auth.isAuthenticated;
 export const selectAuthLoading = (state: { auth: AuthState }) => state.auth.isLoading;
 export const selectAuthError = (state: { auth: AuthState }) => state.auth.error;

@@ -75,7 +75,7 @@ export class AuthService {
 
     return new ResponseHandler('User created successfully', 201, true, {
       user: userDetails,
-      tokens 
+      token : tokens
     });
   }
 
@@ -102,7 +102,7 @@ export class AuthService {
         email: existUser.email,
         name: existUser.name,
       },
-      tokens
+      token : tokens
     });
   }
 

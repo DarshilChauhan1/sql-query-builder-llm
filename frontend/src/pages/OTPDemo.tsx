@@ -54,56 +54,61 @@ export const OTPDemo: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4">
-      <div className="max-w-4xl mx-auto space-y-12">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">OTP Input Components</h1>
-          <p className="text-gray-600">Interactive 6-digit OTP input components with animations</p>
+    <div className="min-h-screen bg-slate-900 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold text-slate-100 mb-4">OTP Input Components</h1>
+          <p className="text-slate-400">Interactive 6-digit OTP input components with animations</p>
         </div>
 
-        {/* Basic OTP Input */}
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Basic OTP Input</h2>
-          <div className="space-y-4">
-            <OTPInput
-              onComplete={handleBasicOTPComplete}
-              onChangeOTP={setBasicOTP}
-            />
-            <p className="text-sm text-gray-600 text-center">
-              Current OTP: <span className="font-mono bg-gray-100 px-2 py-1 rounded">{basicOTP || 'Empty'}</span>
-            </p>
+        {/* Grid of examples */}
+        <div className="grid md:grid-cols-2 gap-8 mb-12">
+          {/* Basic OTP Input */}
+          <div className="bg-slate-800 rounded-lg shadow-lg p-8 border border-slate-700">
+            <h2 className="text-xl font-semibold text-slate-100 mb-6">Basic OTP Input</h2>
+            <div className="space-y-4">
+              <OTPInput
+                onComplete={handleBasicOTPComplete}
+                onChangeOTP={setBasicOTP}
+              />
+              <p className="text-sm text-slate-400 text-center">
+                Current OTP: <span className="font-mono bg-slate-700 px-2 py-1 rounded text-slate-200">{basicOTP || 'Empty'}</span>
+              </p>
+            </div>
           </div>
-        </div>
 
-        {/* Error State OTP */}
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Error State OTP</h2>
-          <div className="space-y-4">
-            <OTPInput
-              onComplete={(otp) => console.log('Error OTP:', otp)}
-              error={true}
-            />
-            <p className="text-sm text-red-600 text-center">Invalid code. Please try again.</p>
+          {/* Error State OTP */}
+          <div className="bg-slate-800 rounded-lg shadow-lg p-8 border border-slate-700">
+            <h2 className="text-xl font-semibold text-slate-100 mb-6">Error State OTP</h2>
+            <div className="space-y-4">
+              <OTPInput
+                onComplete={(otp) => console.log('Error OTP:', otp)}
+                error={true}
+              />
+              <p className="text-sm text-red-400 text-center">Invalid code. Please try again.</p>
+            </div>
           </div>
-        </div>
 
-        {/* Disabled State OTP */}
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Disabled State OTP</h2>
-          <div className="space-y-4">
-            <OTPInput
-              onComplete={(otp) => console.log('Disabled OTP:', otp)}
-              disabled={true}
-            />
-            <p className="text-sm text-gray-500 text-center">Input is disabled</p>
+          {/* Disabled State OTP */}
+          <div className="bg-slate-800 rounded-lg shadow-lg p-8 border border-slate-700">
+            <h2 className="text-xl font-semibold text-slate-100 mb-6">Disabled State OTP</h2>
+            <div className="space-y-4">
+              <OTPInput
+                onComplete={(otp) => console.log('Disabled OTP:', otp)}
+                disabled={true}
+              />
+              <p className="text-sm text-slate-500 text-center">Input is disabled</p>
+            </div>
           </div>
+
         </div>
 
         {/* Full OTP Verification Component */}
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Complete OTP Verification</h2>
-          <p className="text-sm text-gray-600 mb-6 text-center">
-            Try entering <code className="bg-gray-100 px-2 py-1 rounded font-mono">123456</code> for success, or any other code for error
+        <div className="bg-slate-800 rounded-lg shadow-lg p-8 border border-slate-700">
+          <h2 className="text-xl font-semibold text-slate-100 mb-6">Complete OTP Verification</h2>
+          <p className="text-sm text-slate-400 mb-6 text-center">
+            Try entering <code className="bg-slate-700 px-2 py-1 rounded font-mono text-slate-200">123456</code> for success, or any other code for error
           </p>
           <OTPVerification
             title="Verify your email"
@@ -118,8 +123,8 @@ export const OTPDemo: React.FC = () => {
         </div>
 
         {/* Custom Length OTP */}
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Custom Length OTP (4 digits)</h2>
+        <div className="bg-slate-800 rounded-lg shadow-lg p-8 border border-slate-700">
+          <h2 className="text-xl font-semibold text-slate-100 mb-6">Custom Length OTP (4 digits)</h2>
           <div className="space-y-4">
             <OTPInput
               length={4}
@@ -129,12 +134,12 @@ export const OTPDemo: React.FC = () => {
         </div>
 
         {/* Features List */}
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Features</h2>
+        <div className="bg-slate-800 rounded-lg shadow-lg p-8 border border-slate-700">
+          <h2 className="text-xl font-semibold text-slate-100 mb-6">Features</h2>
           <div className="grid md:grid-cols-2 gap-6">
             <div>
-              <h3 className="font-medium text-gray-900 mb-3">User Experience</h3>
-              <ul className="space-y-2 text-sm text-gray-600">
+              <h3 className="font-medium text-slate-100 mb-3">User Experience</h3>
+              <ul className="space-y-2 text-sm text-slate-400">
                 <li>✅ Auto-focus next input on type</li>
                 <li>✅ Backspace navigation</li>
                 <li>✅ Arrow key navigation</li>
@@ -144,8 +149,8 @@ export const OTPDemo: React.FC = () => {
               </ul>
             </div>
             <div>
-              <h3 className="font-medium text-gray-900 mb-3">Visual & States</h3>
-              <ul className="space-y-2 text-sm text-gray-600">
+              <h3 className="font-medium text-slate-100 mb-3">Visual & States</h3>
+              <ul className="space-y-2 text-sm text-slate-400">
                 <li>✅ Smooth hover animations</li>
                 <li>✅ Focus states with ring effects</li>
                 <li>✅ Error state styling</li>
@@ -158,10 +163,10 @@ export const OTPDemo: React.FC = () => {
         </div>
 
         {/* Usage Examples */}
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Usage Examples</h2>
-          <div className="bg-gray-50 rounded-lg p-4">
-            <pre className="text-sm overflow-x-auto">
+        <div className="bg-slate-800 rounded-lg shadow-lg p-8 border border-slate-700">
+          <h2 className="text-xl font-semibold text-slate-100 mb-6">Usage Examples</h2>
+          <div className="bg-slate-700 rounded-lg p-4">
+            <pre className="text-sm overflow-x-auto text-slate-200">
 {`// Basic usage
 <OTPInput
   onComplete={(otp) => console.log('OTP:', otp)}

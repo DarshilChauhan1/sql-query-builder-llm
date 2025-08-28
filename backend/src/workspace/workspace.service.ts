@@ -46,8 +46,13 @@ export class WorkspaceService {
 		return new ResponseHandler('Workspace created successfully', 201, true, newWorkSpace);
 	}
 
-	findAll() {
-		return `This action returns all workspace`;
+	async findAll(userId: string) {
+		const workspaces = await this.prisma.workspace.findMany({
+			where: { userId: userId },
+			orderBy: { createdAt: 'desc' }
+		});
+
+		return new ResponseHandler('Workspaces fetched successfully', 200, true, workspaces);
 	}
 
 	async findOne(id: string, userId: string) {
