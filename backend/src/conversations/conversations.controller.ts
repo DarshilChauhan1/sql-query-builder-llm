@@ -1,19 +1,33 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Res, Sse } from '@nestjs/common';
 import { ConversationsService } from './conversations.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { JwtAuthGuard } from 'src/jwt-auth/jwt.guard';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
+import { map, Observable } from 'rxjs';
+import { CreateMessageStreamDto } from './dto/create-message-stream.dto';
 
 @Controller('conversations')
 @UseGuards(JwtAuthGuard)
 export class ConversationsController {
-  constructor(private readonly conversationsService: ConversationsService) {}
+  constructor(private readonly conversationsService: ConversationsService) { }
 
   @Post('create')
   create(@Body() createConversationDto: CreateConversationDto, @Req() req: Request) {
     const userId = req['user'].id;
-    return this.conversationsService.create(createConversationDto, userId);
+    return this.conversationsService
+      .create(createConversationDto, userId) 
+  }
+
+
+  @Sse('chat-stream')
+  createMessageStream(@Body() paylaod : CreateMessageStreamDto, @Req() Request : Request): Observable<MessageEvent> {
+    const userId = Request['user'].id;
+    return this.conversationsService.createMessageStream(paylaod, userId).pipe(
+      map((data: string) => ({
+        data,
+      })),
+    );
   }
 
   @Get()

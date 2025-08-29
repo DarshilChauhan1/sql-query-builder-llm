@@ -24,16 +24,20 @@ export class JwtAuthGuard implements CanActivate {
 
     async verifyToken(token: string) {
         // check for bearer mark
-        const checkBearer = token.split(' ')[0];
-        if (checkBearer !== 'Bearer') throw new UnauthorizedException('Unauthorized Access');
-
-        // check for token
-        const checkToken = token.split(' ')[1];
-        if (!checkToken) throw new UnauthorizedException('Unauthorized Access');
-
-        // verify the token
-        const verify = await this.jwtService.verifyAsync(checkToken, { secret: process.env.JWT_SECRET });
-        if (!verify) throw new UnauthorizedException('Unauthorized Access');
-        return true;
+        try {
+            const checkBearer = token.split(' ')[0];
+            if (checkBearer !== 'Bearer') throw new UnauthorizedException('Unauthorized Access');
+    
+            // check for token
+            const checkToken = token.split(' ')[1];
+            if (!checkToken) throw new UnauthorizedException('Unauthorized Access');
+    
+            // verify the token
+            const verify = await this.jwtService.verifyAsync(checkToken, { secret: process.env.JWT_SECRET });
+            if (!verify) throw new UnauthorizedException('Unauthorized Access');
+            return true;
+        } catch (error) {
+            throw new UnauthorizedException('UnAuthorized Access')
+        }
     }
 }

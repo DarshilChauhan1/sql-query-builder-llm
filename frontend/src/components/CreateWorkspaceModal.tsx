@@ -1,18 +1,9 @@
 import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { useCreateWorkspaceMutation } from '../store/services/workspace.service';
 import toast from 'react-hot-toast';
-
-const createWorkspaceSchema = z.object({
-    name: z.string().min(1, 'Workspace name is required').max(50, 'Name must be less than 50 characters'),
-    description: z.string().optional(),
-    databaseUrl: z.string().min(1, 'Database URL is required').url('Must be a valid URL'),
-    dbType: z.enum(['postgres', 'mysql', 'mongodb']),
-});
-
-type CreateWorkspaceForm = z.infer<typeof createWorkspaceSchema>;
+import {  WorkspaceSchema, type CreateWorkSpaceSchema } from '../schema/workspace.schema';
 
 interface CreateWorkspaceModalProps {
     isOpen: boolean;
@@ -28,8 +19,8 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({ isOp
         formState: { errors },
         reset,
         watch
-    } = useForm<CreateWorkspaceForm>({
-        resolver: zodResolver(createWorkspaceSchema),
+    } = useForm<CreateWorkSpaceSchema>({
+        resolver: zodResolver(WorkspaceSchema),
         defaultValues: {
             name: '',
             description: '',
@@ -40,7 +31,7 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({ isOp
 
     const selectedDbType = watch('dbType');
 
-    const onSubmit = async (data: CreateWorkspaceForm) => {
+    const onSubmit = async (data: CreateWorkSpaceSchema) => {
         try {
             await createWorkspace(data).unwrap();
             toast.success('Workspace created successfully!');

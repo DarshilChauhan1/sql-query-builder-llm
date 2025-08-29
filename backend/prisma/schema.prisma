@@ -23,58 +23,64 @@ enum ChatRole {
   assistant
 }
 
-
 model User {
-  id  String @id @default(uuid())
-  email String @unique
-  name String
-  password String
+  id         String      @id @default(uuid())
+  email      String      @unique
+  name       String
+  password   String
   workspaces Workspace[]
-  isVerified Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isVerified   Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  Conversation Conversation[]
+  Messages     Messages[]
 }
 
 model Workspace {
-  id String @id @default(uuid())
-  userId String
-  user User @relation(fields: [userId], references: [id])
-  databaseConnection DatabaseConnection ?
-  conversations Conversation[]
-  name String
-  description String ?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String              @id @default(uuid())
+  userId             String
+  user               User                @relation(fields: [userId], references: [id])
+  databaseConnection DatabaseConnection?
+  conversations      Conversation[]
+  name               String
+  isSchemaValidated  Boolean             @default(false)
+  description        String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 }
 
-model DatabaseConnection{
-  id String @id @default(uuid())
-  workspaceId String @unique
-  workspace Workspace @relation(fields: [workspaceId], references: [id])
-  schema Json
-  connectionString String ?
-  dbType Dbtype @default(postgres)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model DatabaseConnection {
+  id               String    @id @default(uuid())
+  workspaceId      String    @unique
+  workspace        Workspace @relation(fields: [workspaceId], references: [id])
+  schema           Json
+  connectionString String?
+  dbType           Dbtype    @default(postgres)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 model Conversation {
-  id String @id @default(uuid())
+  id          String     @id @default(uuid())
   workspaceId String
-  workspace Workspace @relation(fields: [workspaceId], references: [id])
-  messages Message[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  title       String
+  userId      String
+  user        User       @relation(fields: [userId], references: [id])
+  messages    Messages[]
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id])
 }
 
-model Message {
-  id String @id @default(uuid())
+model Messages {
+  id             String       @id @default(uuid())
   conversationId String
-  conversation Conversation @relation(fields: [conversationId], references: [id])
-  role ChatRole
-  sqlQuery String
-  prompt String
-  queryResults Json ?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  userId         String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+  role           ChatRole
+  sqlQuery       String ?
+  prompt         String ?
+  queryResult    String ?
+  messageId      Int
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 }

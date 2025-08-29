@@ -4,6 +4,7 @@ import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { JwtAuthGuard } from 'src/jwt-auth/jwt.guard';
 import type { Request } from 'express';
+import { ValidateSchemaDto } from './dto/validate-schema.dto';
 
 @Controller('workspace')
 @UseGuards(JwtAuthGuard)
@@ -14,6 +15,11 @@ export class WorkspaceController {
   create(@Body() createWorkspaceDto: CreateWorkspaceDto, @Req() req: Request) {
     const userId = req['user'].id;
     return this.workspaceService.create(createWorkspaceDto, userId);
+  }
+
+  @Post('validate-connection')
+  validateConnection(@Body() body: ValidateSchemaDto) {
+    return this.workspaceService.validateSchema(body);
   }
 
   @Get()

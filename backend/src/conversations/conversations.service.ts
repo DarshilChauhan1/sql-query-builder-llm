@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -9,6 +9,9 @@ import { DBType } from 'src/common/enums/DBtype.enum';
 import { Client as PgClient } from "pg";
 import mysql from "mysql2/promise";
 import { MongoClient } from "mongodb";
+import { Response } from 'express';
+import { Observable } from 'rxjs';
+import { CreateMessageStreamDto } from './dto/create-message-stream.dto';
 
 
 @Injectable()
@@ -22,24 +25,78 @@ export class ConversationsService {
       apiKey: this.configService.get<string>('OPENAI_API_KEY')
     })
   }
+
+  private systemPrompt = `
+  You are an expert in SQL Query and Database with 10 years of experience.
+  You are given a user's natural language prompt and the results of an SQL query executed against their database.
+  Your task is to generate a clear, concise, and accurate response to the user's prompt based on the query results.
+  If the query results do not contain relevant information to answer the user's prompt, respond with "I'm sorry, but I don't have enough information to answer that question based on the provided data."
+  You will be given the SQL Query results in JSON format.
+  Understand the user's intent and the context of the data.
+  Always ensure your response is factual and directly supported by the query results.
+  Here are some guidelines to follow:
+  1. Understand the user's intent from their natural language prompt.
+  2. Analyze the SQL query results to extract relevant information.
+  3. Formulate a response that directly addresses the user's prompt using only the information available in the query results.
+  4. If the query results are empty or do not pertain to the user's question, politely inform them that you cannot provide an answer based on the available data.
+  5. Keep your response clear, concise, and free of any assumptions or external knowledge not present in the query results.
+  `
+
   async create(createConversationDto: CreateConversationDto, userId: string) {
     const { workspaceId, prompt } = createConversationDto;
     const getWorkSpaceDetails = await this.prisma.workspace.findUnique({
       where: { id: workspaceId, userId: userId },
       include: { databaseConnection: true }
     })
+
+    // first save the message of that conversations 
+
     if (!getWorkSpaceDetails) throw new NotFoundException('Workspace not found');
     // get the schemas for the DB connections
     const schemas = getWorkSpaceDetails.databaseConnection?.schema;
     if (schemas) {
-      // Do something with the schemas
-      const generateQuery = await this.generateSQLQuery(prompt, JSON.stringify(schemas));
-      if (!generateQuery.success) throw new NotFoundException('Failed to generate SQL query');
-      const sqlQuery = generateQuery.data;
-      const queryResults = await this.executeSQLQuery(sqlQuery, getWorkSpaceDetails.databaseConnection?.dbType as any, getWorkSpaceDetails.databaseConnection?.connectionString as any);
-      console.log('Query Results:', queryResults);
+      // first create the conversation with title
+      const generateConversationTitle = await this.generateRelevantTitle(prompt)
+
+      if (!generateConversationTitle.success) throw new NotFoundException('Failed to generate conversation title');
+      const title = generateConversationTitle.data;
+      const createConversation = await this.prisma.conversation.create({
+        data: {
+          title,
+          workspaceId: getWorkSpaceDetails.id,
+          userId
+        }
+      })
+
+      // Then create a user message for that conversation
+      const createUserMessage = await this.prisma.messages.create({
+        data: {
+          conversationId: createConversation.id,
+          role: 'user',
+          messageId : 0,
+          prompt,    
+          userId
+        }
+      })
+
+      return new ResponseHandler('Conversation created successfully', 201, true, {
+        conversationId: createConversation.id,
+        title : createConversation.title,
+        prompt : createUserMessage.prompt
+      });
+
     }
-    return new ResponseHandler('Conversation created successfully', 201, true, {});
+
+    throw new NotFoundException('Database schema not found Please add the schema in database connection');
+  }
+
+  async createMessageStream(createMessageStream : CreateMessageStreamDto, userId : string) : Observable<any> {
+    const { conversationId, prompt } = createMessageStream;
+
+    // first find the conversations and the workspace schema 
+    const findConversation = await this.prisma.conversation.findUnique({
+      where : { id : conversationId },
+    })
   }
 
   findAll() {
@@ -157,6 +214,110 @@ export class ConversationsService {
       }
     }
 
-    return queryResults;
+    return {
+      message: 'Query executed successfully',
+      success: true,
+      data: queryResults
+    };
   }
+
+  private async getLLMResponse(prompt: string, queryResults: any, userId: string, conversationId: string): Promise<Observable<string>> {
+    const llmPrompt = `
+    ${this.systemPrompt}
+    Here is the SQL Query Results: ${JSON.stringify(queryResults)}
+    User's Question: ${prompt}
+  `;
+
+    return new Observable((subscriber) => {
+      let fullResponse = '';
+
+      (async () => {
+        try {
+          const chatResponse = await this.openAI.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [{ role: 'user', content: llmPrompt }],
+            max_tokens: 1024,
+            temperature: 0.2,
+            stream: true,
+          });
+
+          for await (const chunk of chatResponse) {
+            const delta = chunk.choices[0]?.delta?.content || '';
+            if (delta) {
+              fullResponse += delta;
+              subscriber.next(delta); // stream to client
+            }
+          }
+
+          // After the full response is generated, save it to the database
+          await this.prisma.messages.create({
+            data: {
+              conversationId,
+              role: 'assistant',
+              messageId: 1,
+              queryResult: JSON.stringify(queryResults),
+              prompt: fullResponse,
+              userId
+            }
+          });
+
+          subscriber.complete();
+        } catch (err) {
+          subscriber.error(err);
+        }
+      })();
+
+      // Optionally, return a teardown logic if needed
+      return () => {};
+    });
+  }
+
+  private async generateRelevantTitle(prompt: string) {
+    const llmPromptForTitle = `
+    You are an expert at generating concise, descriptive titles for database query conversations.
+    Your task is to create a short, meaningful title based on the user's natural language query.
+    
+    Guidelines:
+    1. Keep the title between 3-8 words
+    2. Focus on the main intent of the query (what data they're looking for)
+    3. Use clear, simple language
+    4. Avoid technical jargon unless necessary
+    5. Don't include "SQL" or "Query" in the title
+    6. Make it descriptive enough to distinguish from other conversations
+    
+    Examples:
+    - User Query: "Show me all users who registered in the last month"
+    - Title: "Recent User Registrations"
+    
+    - User Query: "What are the top selling products by revenue?"
+    - Title: "Top Products by Revenue"
+    
+    - User Query: "Find customers who haven't placed orders recently"
+    - Title: "Inactive Customers"
+    
+    User Query: "${prompt}"
+    
+    Return ONLY the title, nothing else.
+    `;
+
+    const response = await this.openAI.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'user',
+          content: llmPromptForTitle,
+        },
+      ],
+      max_tokens: 20,
+      temperature: 0.3,
+    });
+
+    const title = response.choices[0].message?.content?.trim() || 'Untitled Conversation';
+    return {
+      message: 'Title generated successfully',
+      success: true,
+      data: title
+    }
+  }
+
 }
