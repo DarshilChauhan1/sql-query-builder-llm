@@ -7,11 +7,9 @@ import { ConfigService } from '@nestjs/config';
 import { ResponseHandler } from 'src/common/utils/response-handler.utils';
 import { DBType } from 'src/common/enums/DBtype.enum';
 import { Client as PgClient } from "pg";
-import mysql from "mysql2/promise";
-import { MongoClient } from "mongodb";
-import { Response } from 'express';
 import { Observable } from 'rxjs';
 import { CreateMessageStreamDto } from './dto/create-message-stream.dto';
+import { StreamEventData } from './types/stream-events.types';
 
 
 @Injectable()
@@ -44,6 +42,7 @@ export class ConversationsService {
 
   async create(createConversationDto: CreateConversationDto, userId: string) {
     const { workspaceId, prompt } = createConversationDto;
+
     const getWorkSpaceDetails = await this.prisma.workspace.findUnique({
       where: { id: workspaceId, userId: userId },
       include: { databaseConnection: true }
@@ -54,49 +53,242 @@ export class ConversationsService {
     if (!getWorkSpaceDetails) throw new NotFoundException('Workspace not found');
     // get the schemas for the DB connections
     const schemas = getWorkSpaceDetails.databaseConnection?.schema;
-    if (schemas) {
-      // first create the conversation with title
-      const generateConversationTitle = await this.generateRelevantTitle(prompt)
+    if (!schemas) throw new NotFoundException('Database connection not found Please add the database connection');
 
-      if (!generateConversationTitle.success) throw new NotFoundException('Failed to generate conversation title');
-      const title = generateConversationTitle.data;
-      const createConversation = await this.prisma.conversation.create({
-        data: {
-          title,
-          workspaceId: getWorkSpaceDetails.id,
-          userId
-        }
-      })
+    // first create the conversation with title
+    const generateConversationTitle = await this.generateRelevantTitle(prompt)
 
-      // Then create a user message for that conversation
-      const createUserMessage = await this.prisma.messages.create({
-        data: {
-          conversationId: createConversation.id,
-          role: 'user',
-          messageId : 0,
-          prompt,    
-          userId
-        }
-      })
+    if (!generateConversationTitle.success) throw new NotFoundException('Failed to generate conversation title');
 
-      return new ResponseHandler('Conversation created successfully', 201, true, {
+    const title = generateConversationTitle.data;
+    const createConversation = await this.prisma.conversation.create({
+      data: {
+        title,
+        workspaceId: getWorkSpaceDetails.id,
+        userId
+      }
+    })
+
+    // Then create a user message for that conversation
+    const createUserMessage = await this.prisma.messages.create({
+      data: {
         conversationId: createConversation.id,
-        title : createConversation.title,
-        prompt : createUserMessage.prompt
-      });
+        role: 'user',
+        messageId: 0,
+        prompt,
+        userId
+      }
+    })
 
-    }
-
-    throw new NotFoundException('Database schema not found Please add the schema in database connection');
+    return new ResponseHandler('Conversation created successfully', 201, true, {
+      conversationId: createConversation.id,
+      title: createConversation.title,
+      prompt: createUserMessage.prompt
+    });
   }
 
-  async createMessageStream(createMessageStream : CreateMessageStreamDto, userId : string) : Observable<any> {
+  async createMessageStream(createMessageStream: CreateMessageStreamDto, userId: string): Promise<Observable<StreamEventData>> {
     const { conversationId, prompt } = createMessageStream;
 
-    // first find the conversations and the workspace schema 
-    const findConversation = await this.prisma.conversation.findUnique({
-      where : { id : conversationId },
-    })
+    // Validate conversation access and get workspace details
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { 
+        id: conversationId,
+        userId: userId // Ensure user owns the conversation
+      },
+      include: {
+        workspace: {
+          include: { databaseConnection: true }
+        }
+      }
+    });
+
+    if (!conversation) {
+      throw new NotFoundException('Conversation not found or access denied');
+    }
+
+    if (!conversation.workspace.databaseConnection?.schema) {
+      throw new NotFoundException('Database schema not configured for this workspace');
+    }
+
+    const { workspace } = conversation;
+    const schemas = workspace.databaseConnection!.schema;
+
+    if(!workspace.databaseConnection) throw new NotFoundException('Database connection not configured for this workspace');
+
+    return new Observable<StreamEventData>((subscriber) => {
+      this.processMessageStream(conversationId, prompt, schemas, workspace.databaseConnection, userId, subscriber)
+        .catch(error => {
+          console.error('Stream processing error:', error);
+          subscriber.error(error);
+        });
+    });
+  }
+
+  private async processMessageStream(
+    conversationId: string,
+    prompt: string,
+    schemas: any,
+    dbConnection: any,
+    userId: string,
+    subscriber: any
+  ) {
+    let userMessage: any;
+    let sqlQuery = '';
+    let queryResults: any = [];
+
+    try {
+      // Get the next message ID for this conversation
+      const messageCount = await this.prisma.messages.count({
+        where: { conversationId }
+      });
+
+      // 1. Create user message first
+      userMessage = await this.prisma.messages.create({
+        data: {
+          conversationId,
+          userId,
+          role: 'user',
+          prompt: prompt,
+          sqlQuery: '', // Will be updated after query generation
+          messageId: messageCount
+        }
+      });
+
+      subscriber.next({
+        type: 'user_message_created',
+        data: {
+          id: userMessage.id,
+          conversationId: userMessage.conversationId,
+          prompt: userMessage.prompt,
+          role: userMessage.role,
+          createdAt: userMessage.createdAt.toISOString()
+        }
+      });
+
+      // 2. Generate SQL query
+      try {
+        const queryResponse = await this.generateSQLQuery(prompt, JSON.stringify(schemas));
+        if (queryResponse.success) {
+          sqlQuery = queryResponse.data;
+          
+          // Update user message with generated SQL
+          await this.prisma.messages.update({
+            where: { id: userMessage.id },
+            data: { sqlQuery }
+          });
+
+          subscriber.next({
+            type: 'sql_generated',
+            data: { sqlQuery }
+          });
+        }
+      } catch (error) {
+        console.error('SQL generation failed:', error);
+        subscriber.next({
+          type: 'error',
+          message: 'Failed to generate SQL query'
+        });
+        throw error;
+      }
+
+      // 3. Execute SQL query
+      try {
+        const executionResult = await this.executeSQLQuery(
+          sqlQuery,
+          dbConnection.dbType,
+          dbConnection.connectionString
+        );
+        
+        if (executionResult.success) {
+          queryResults = executionResult.data;
+          subscriber.next({
+            type: 'query_executed',
+            data: { results: queryResults }
+          });
+        }
+      } catch (error) {
+        console.error('SQL execution failed:', error);
+        subscriber.next({
+          type: 'error',
+          message: 'Failed to execute SQL query'
+        });
+        throw error;
+      }
+
+      // 4. Stream LLM response
+      const llmPrompt = `
+        ${this.systemPrompt}
+        Here is the SQL Query that was executed: ${sqlQuery}
+        Here is the SQL Query Results: ${JSON.stringify(queryResults)}
+        User's Question: ${prompt}
+      `;
+
+      let fullResponse = '';
+      const chatResponse = await this.openAI.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: llmPrompt }],
+        max_tokens: 1024,
+        temperature: 0.2,
+        stream: true,
+      });
+
+      subscriber.next({ type: 'llm_stream_start' });
+
+      for await (const chunk of chatResponse) {
+        const delta = chunk.choices[0]?.delta?.content || '';
+        if (delta) {
+          fullResponse += delta;
+          subscriber.next({
+            type: 'llm_chunk',
+            data: { content: delta }
+          });
+        }
+      }
+
+      // 5. Save assistant message
+      const assistantMessage = await this.prisma.messages.create({
+        data: {
+          conversationId,
+          userId,
+          role: 'assistant',
+          prompt: fullResponse,
+          sqlQuery,
+          queryResult: JSON.stringify(queryResults),
+          messageId: messageCount + 1
+        }
+      });
+
+      subscriber.complete();
+
+    } catch (error) {
+      console.error('Stream processing error:', error);
+      
+      // Try to save error state if user message was created
+      if (userMessage) {
+        try {
+          const errorMessageCount = await this.prisma.messages.count({
+            where: { conversationId }
+          });
+
+          await this.prisma.messages.create({
+            data: {
+              conversationId,
+              userId,
+              role: 'assistant',
+              prompt: 'Sorry, I encountered an error processing your request. Please try again.',
+              sqlQuery: sqlQuery || '',
+              queryResult: JSON.stringify({ error: error.message }),
+              messageId: errorMessageCount
+            }
+          });
+        } catch (saveError) {
+          console.error('Failed to save error message:', saveError);
+        }
+      }
+
+      subscriber.error(error);
+    }
   }
 
   findAll() {
@@ -116,84 +308,223 @@ export class ConversationsService {
   }
 
   private async generateSQLQuery(prompt: string, schema: string) {
-    console.log(schema)
+    
+    const formattedSchema = this.formatSchemaForPostgres(schema);
+    
     const detailedPrompt = `
-    You are an expert SQL query generator.  
-    Your job is to take a natural language request from the user and generate a correct, executable SQL query. 
-    Understand the user's intent and the context provided by the schema.
-    Here is the Question of the User
-    Question : ${prompt}
+    You are an expert PostgreSQL query generator with deep knowledge of PostgreSQL syntax and best practices.
+    Your job is to take a natural language request and generate a correct, executable PostgreSQL query.
+    
+    User Question: ${prompt}
 
-    ### Context:
-    - You will be given a database schema. Use it as the single source of truth.  
-    - Do not make up tables or columns that are not in the schema.  
-    - Always respect table names, column names, and data types exactly as provided.  
+    ### PostgreSQL Database Schema:
+    ${formattedSchema}
 
-    ### Rules:
-    1. The query must be valid SQL and executable in PostgreSQL.  
-    2. Always include the full SELECT clause instead of SELECT *, unless the user explicitly requests all columns.  
-    3. If the user query is ambiguous, pick the most logical interpretation based on the schema.
-    4. If the user request cannot be solved with the given schema, return a safe error message instead of inventing tables.  
-    5. When filtering, use proper operators (=, ILIKE, IN, etc.) depending on context.  
-    6. Use ORDER BY or LIMIT only if requested or clearly implied.  
-    7. Format the SQL query with proper indentation for readability.  
+    ### PostgreSQL-Specific Rules:
+    1. The query MUST be valid PostgreSQL syntax and executable.
+    2. Use proper PostgreSQL data types and functions.
+    3. Table names are case-sensitive - use exactly as shown in schema.
+    4. Column names are case-sensitive - use exactly as shown in schema.
+    5. Use double quotes around identifiers if they contain special characters or mixed case.
+    6. Use PostgreSQL-specific operators: ILIKE for case-insensitive matching, ~ for regex.
+    7. Use LIMIT instead of TOP for row limiting.
+    8. Use PostgreSQL date/time functions: NOW(), CURRENT_DATE, INTERVAL.
+    9. Use proper JOIN syntax with explicit JOIN conditions.
+    10. For text search, prefer ILIKE over LIKE for case-insensitive searches.
+    11. Use appropriate PostgreSQL aggregate functions.
+    12. Handle NULL values properly with IS NULL / IS NOT NULL.
 
-    ### Input You Will Receive:
-    - Natural language prompt: a plain English question or request.  
-    - Database Schema:  
-    ${schema}
+    ### Query Construction Guidelines:
+    - Always use explicit column names instead of SELECT *
+    - Use proper table aliases for readability
+    - Include appropriate WHERE clauses for filtering
+    - Use ORDER BY when logical ordering is needed
+    - Add LIMIT when reasonable result size is expected
+    - Use appropriate JOINs to connect related tables
+    - Consider performance with proper indexing assumptions
 
-    ### Output You Must Provide:
-    - A single executable SQL query.  
-    - The query should be clean, readable, and ready to run.  
+    ### Example Patterns:
+    - String matching: WHERE column_name ILIKE '%search_term%'
+    - Date filtering: WHERE date_column >= NOW() - INTERVAL '7 days'
+    - Joins: FROM table1 t1 JOIN table2 t2 ON t1.id = t2.foreign_id
+    - Limiting: ORDER BY column_name LIMIT 10
 
-    Example:  
-    User Prompt: Get all users who registered in the last 7 days  
-    Output:  
+    ### Output Format:
+    Return ONLY a JSON object with the PostgreSQL query:
     {
-      "query": "SELECT id, name, email, created_at FROM \"User\" WHERE created_at >= NOW() - INTERVAL '7 days'"
+      "query": "SELECT column1, column2 FROM table_name WHERE condition ORDER BY column1 LIMIT 10"
     }
 
     CRITICAL REQUIREMENTS:
-    - Return ONLY the SQL query in the "query" field
-    - NO comments, assumptions, or explanations in the SQL
-    - NO text before or after the SQL query
-    - The query field must contain pure, executable SQL only
-    - Do not add any -- comments or explanatory text
+    - Return ONLY valid PostgreSQL SQL in the "query" field
+    - NO comments, explanations, or additional text
+    - NO markdown formatting or code blocks
+    - Query must be executable as-is
+    - Use exact table and column names from the schema
+    - Ensure proper PostgreSQL syntax throughout
     `;
 
-    const response = await this.openAI.chat.completions.create({
-      model: 'gpt-4o-mini', // or gpt-4o
-      messages: [
-        {
-          role: 'user',
-          content: detailedPrompt,
-        },
-      ],
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: "query_schema",
-          schema: {
-            type: "object",
-            properties: {
-              query: {
-                type: "string"
-              }
-            },
-            required: ["query"],
-            additionalProperties: false
+    try {
+      const response = await this.openAI.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'user',
+            content: detailedPrompt,
+          },
+        ],
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: "postgres_query_schema",
+            schema: {
+              type: "object",
+              properties: {
+                query: {
+                  type: "string",
+                  description: "A valid PostgreSQL query"
+                }
+              },
+              required: ["query"],
+              additionalProperties: false
+            }
           }
-        }
+        },
+        temperature: 0.1, // Lower temperature for more consistent SQL generation
+        max_tokens: 500
+      });
+
+      console.log('OpenAI response:', response.choices[0].message?.content);
+      const responseContent = JSON.parse(response.choices[0].message?.content || '{}');
+      
+      if (!responseContent.query) {
+        throw new Error('No query generated by OpenAI');
       }
-    });
-    console.log('OpenAI response:', response.choices[0].message?.content);
-    const responseContent = JSON.parse(response.choices[0].message?.content || '{}');
-    const sqlQuery = responseContent.query;
-    return new ResponseHandler('SQL Query generated successfully', 200, true, sqlQuery);
+
+      const sqlQuery = this.cleanAndValidatePostgresQuery(responseContent.query);
+      return new ResponseHandler('SQL Query generated successfully', 200, true, sqlQuery);
+      
+    } catch (error) {
+      console.error('Error generating SQL query:', error);
+      return new ResponseHandler('Failed to generate SQL query', 500, false, null);
+    }
   }
 
-  private async executeSQLQuery(sqlQuery: string, dbType: DBType, connectionString: string) {
+  private formatSchemaForPostgres(schemaString: string): string {
+    try {
+      const schemas = JSON.parse(schemaString);
+      
+      if (!Array.isArray(schemas)) {
+        return 'Invalid schema format';
+      }
+
+      const tableSchemas = new Map();
+      
+      // Group columns by table name
+      schemas.forEach(schemaItem => {
+        Object.keys(schemaItem).forEach(tableName => {
+          if (!tableSchemas.has(tableName)) {
+            tableSchemas.set(tableName, []);
+          }
+          tableSchemas.get(tableName).push(...schemaItem[tableName]);
+        });
+      });
+
+      let formattedSchema = 'PostgreSQL Database Tables and Columns:\n\n';
+      
+      tableSchemas.forEach((columns, tableName) => {
+        formattedSchema += `Table: ${tableName}\n`;
+        formattedSchema += `Columns:\n`;
+        
+        // Remove duplicates and sort columns
+        const uniqueColumns = columns.filter((col, index, self) => 
+          index === self.findIndex(c => c.columnName === col.columnName)
+        );
+        
+        uniqueColumns.forEach(col => {
+          const dataType = this.mapPostgresDataType(col.dataType);
+          const nullable = col.isNullable === 'YES' ? 'NULL' : 'NOT NULL';
+          const maxLength = col.characterMaximumLength ? `(${col.characterMaximumLength})` : '';
+          
+          formattedSchema += `  - ${col.columnName}: ${dataType}${maxLength} ${nullable}\n`;
+        });
+        
+        formattedSchema += '\n';
+      });
+
+      // Add relationship hints based on common patterns
+      formattedSchema += this.addRelationshipHints(tableSchemas);
+      
+      return formattedSchema;
+      
+    } catch (error) {
+      console.error('Error formatting schema:', error);
+      return `Raw schema data: ${schemaString}`;
+    }
+  }
+
+  private mapPostgresDataType(dataType: string): string {
+    const typeMapping = {
+      'character varying': 'VARCHAR',
+      'character': 'CHAR',
+      'timestamp without time zone': 'TIMESTAMP',
+      'timestamp with time zone': 'TIMESTAMPTZ',
+      'USER-DEFINED': 'ENUM',
+      'ARRAY': 'ARRAY',
+      'tsvector': 'TSVECTOR',
+      'bytea': 'BYTEA'
+    };
+    
+    return typeMapping[dataType] || dataType.toUpperCase();
+  }
+
+  private addRelationshipHints(tableSchemas: Map<string, any[]>): string {
+    let hints = 'Common Relationship Patterns:\n';
+    
+    // Look for foreign key patterns
+    const tables = Array.from(tableSchemas.keys());
+    
+    tables.forEach(table => {
+      const columns = tableSchemas.get(table) || [];
+      columns.forEach(col => {
+        // Look for ID columns that might be foreign keys
+        if (col.columnName.endsWith('_id') && col.columnName !== `${table}_id`) {
+          const referencedTable = col.columnName.replace('_id', '');
+          if (tables.includes(referencedTable)) {
+            hints += `- ${table}.${col.columnName} likely references ${referencedTable}.${referencedTable}_id\n`;
+          }
+        }
+      });
+    });
+    
+    return hints + '\n';
+  }
+
+  private cleanAndValidatePostgresQuery(query: string): string {
+    // Clean the query
+    let cleanedQuery = query
+      .replace(/;+$/, '') // Remove trailing semicolons
+      .replace(/--.*$/gm, '') // Remove single-line comments
+      .replace(/\/\*[\s\S]*?\*\//g, '') // Remove multi-line comments
+      .trim();
+
+    // Basic PostgreSQL syntax validation
+    if (!cleanedQuery.toLowerCase().startsWith('select') && 
+        !cleanedQuery.toLowerCase().startsWith('with')) {
+      throw new Error('Query must be a SELECT statement');
+    }
+
+    // Ensure proper PostgreSQL syntax patterns
+    cleanedQuery = cleanedQuery
+      .replace(/\bTOP\s+(\d+)\b/gi, 'LIMIT $1') // Replace TOP with LIMIT
+      .replace(/\bgetdate\(\)/gi, 'NOW()') // Replace SQL Server functions
+      .replace(/\blen\(/gi, 'LENGTH(') // Replace SQL Server functions
+      .replace(/\[\w+\]/g, (match) => `"${match.slice(1, -1)}"`) // Replace [column] with "column"
+
+    return cleanedQuery;
+  }
+
+  private async executeSQLQuery(sqlQuery: string, dbType: any, connectionString: string) {
     const queryResults: any = [];
     console.log(connectionString)
     switch (dbType) {
@@ -219,57 +550,6 @@ export class ConversationsService {
       success: true,
       data: queryResults
     };
-  }
-
-  private async getLLMResponse(prompt: string, queryResults: any, userId: string, conversationId: string): Promise<Observable<string>> {
-    const llmPrompt = `
-    ${this.systemPrompt}
-    Here is the SQL Query Results: ${JSON.stringify(queryResults)}
-    User's Question: ${prompt}
-  `;
-
-    return new Observable((subscriber) => {
-      let fullResponse = '';
-
-      (async () => {
-        try {
-          const chatResponse = await this.openAI.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [{ role: 'user', content: llmPrompt }],
-            max_tokens: 1024,
-            temperature: 0.2,
-            stream: true,
-          });
-
-          for await (const chunk of chatResponse) {
-            const delta = chunk.choices[0]?.delta?.content || '';
-            if (delta) {
-              fullResponse += delta;
-              subscriber.next(delta); // stream to client
-            }
-          }
-
-          // After the full response is generated, save it to the database
-          await this.prisma.messages.create({
-            data: {
-              conversationId,
-              role: 'assistant',
-              messageId: 1,
-              queryResult: JSON.stringify(queryResults),
-              prompt: fullResponse,
-              userId
-            }
-          });
-
-          subscriber.complete();
-        } catch (err) {
-          subscriber.error(err);
-        }
-      })();
-
-      // Optionally, return a teardown logic if needed
-      return () => {};
-    });
   }
 
   private async generateRelevantTitle(prompt: string) {
@@ -317,6 +597,118 @@ export class ConversationsService {
       message: 'Title generated successfully',
       success: true,
       data: title
+    }
+  }
+
+  // Additional helper methods for better conversation management
+  async getConversationsByWorkspace(workspaceId: string, userId: string) {
+    try {
+      // Verify user owns the workspace
+      const workspace = await this.prisma.workspace.findUnique({
+        where: { id: workspaceId, userId: userId }
+      });
+      
+      if (!workspace) {
+        throw new NotFoundException('Workspace not found or access denied');
+      }
+
+      const conversations = await this.prisma.conversation.findMany({
+        where: { workspaceId: workspaceId },
+        orderBy: { id: 'desc' },
+        include: {
+          messages: {
+            take: 1,
+            orderBy: { createdAt: 'desc' },
+            select: {
+              prompt: true,
+              role: true,
+              createdAt: true
+            }
+          }
+        }
+      });
+
+      return new ResponseHandler('Conversations retrieved successfully', 200, true, conversations);
+    } catch (error) {
+      console.error('Error fetching conversations:', error);
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to fetch conversations');
+    }
+  }
+
+  async getMessages(conversationId: string, userId: string) {
+    try {
+      // Get conversation and verify user access
+      const conversation = await this.prisma.conversation.findFirst({
+        where: { 
+          id: conversationId,
+          userId: userId 
+        },
+        include: { 
+          messages: {
+            orderBy: { messageId: 'asc' },
+            select: {
+              id: true,
+              prompt: true,
+              role: true,
+              sqlQuery: true,
+              queryResult: true,
+              createdAt: true,
+              messageId: true
+            }
+          }
+        }
+      });
+
+      if (!conversation) {
+        throw new NotFoundException('Conversation not found or access denied');
+      }
+
+      return new ResponseHandler('Messages retrieved successfully', 200, true, conversation.messages);
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to fetch messages');
+    }
+  }
+
+  async deleteConversation(conversationId: string, userId: string) {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // Verify ownership
+        const conversation = await tx.conversation.findFirst({
+          where: { 
+            id: conversationId,
+            userId: userId 
+          }
+        });
+
+        if (!conversation) {
+          throw new NotFoundException('Conversation not found or access denied');
+        }
+
+        // Delete messages first (due to foreign key constraints)
+        await tx.messages.deleteMany({
+          where: { conversationId: conversationId }
+        });
+
+        // Delete conversation
+        await tx.conversation.delete({
+          where: { id: conversationId }
+        });
+
+        return new ResponseHandler('Conversation deleted successfully', 200, true, null);
+      });
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to delete conversation');
     }
   }
 
