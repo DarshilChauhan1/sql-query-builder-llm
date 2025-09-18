@@ -155,17 +155,6 @@ export class ConversationsService {
         }
       });
 
-      subscriber.next({
-        type: 'user_message_created',
-        data: {
-          id: userMessage.id,
-          conversationId: userMessage.conversationId,
-          prompt: userMessage.prompt,
-          role: userMessage.role,
-          createdAt: userMessage.createdAt.toISOString()
-        }
-      });
-
       // 2. Generate SQL query
       try {
         const queryResponse = await this.generateSQLQuery(prompt, JSON.stringify(schemas));
@@ -175,11 +164,6 @@ export class ConversationsService {
           // Update user message with generated SQL
           await this.prisma.messages.update({
             where: { id: userMessage.id },
-            data: { sqlQuery }
-          });
-
-          subscriber.next({
-            type: 'sql_generated',
             data: { sqlQuery }
           });
         }
@@ -200,11 +184,10 @@ export class ConversationsService {
           dbConnection.connectionString
         );
         
-        if (executionResult.success) {
-          queryResults = executionResult.data;
+        if(!executionResult.success) {
           subscriber.next({
-            type: 'query_executed',
-            data: { results: queryResults }
+            type: 'error',
+            message: 'SQL query execution failed'
           });
         }
       } catch (error) {

@@ -1,5 +1,6 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { createApi } from "@reduxjs/toolkit/query/react";
 import type { ResponseInterface } from "../../common/interfaces/ReponseInterface";
+import { baseQueryWithAuth } from "../api/baseQuery";
 
 export interface CreateConversationRequest {
     workspaceId: string;
@@ -29,19 +30,15 @@ export interface Conversation {
     messages?: Message[];
 }
 
+export interface CreateConversationResponse {
+    conversationId: string;
+    title: string;
+    prompt: string;
+}
+
 export const conversationService = createApi({
     reducerPath: 'conversationApi',
-    baseQuery: fetchBaseQuery({
-        baseUrl: import.meta.env.VITE_API_URL || 'http://localhost:4000/api/v1',
-        prepareHeaders: (headers) => {
-            const token = localStorage.getItem('accessToken');
-            if (token) {
-                headers.set('Authorization', `Bearer ${token}`);
-            }
-            headers.set('Content-Type', 'application/json');
-            return headers;
-        }
-    }),
+    baseQuery: baseQueryWithAuth,
     tagTypes: ['Conversation', 'Message'],
     endpoints: (builder) => ({
         getConversations: builder.query<ResponseInterface<Conversation[]>, string>({
@@ -58,7 +55,7 @@ export const conversationService = createApi({
             }),
             providesTags: (_, __, id) => [{ type: 'Conversation', id }]
         }),
-        createConversation: builder.mutation<ResponseInterface<Conversation>, CreateConversationRequest>({
+        createConversation: builder.mutation<ResponseInterface<CreateConversationResponse>, CreateConversationRequest>({
             query: (payload) => ({
                 url: '/conversations/create',
                 method: 'POST',

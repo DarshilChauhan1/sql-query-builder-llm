@@ -13,7 +13,7 @@ export class MailService {
       service: 'gmail', // You can change this to your preferred email service
       auth: {
         user: this.configService.get<string>('EMAIL_USER'),
-        pass: this.configService.get<string>('EMAIL_PASS'),
+        pass: this.configService.get<string>('EMAIL_PASS')
       },
     });
   }

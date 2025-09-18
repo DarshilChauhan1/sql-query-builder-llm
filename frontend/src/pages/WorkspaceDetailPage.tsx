@@ -23,9 +23,10 @@ export const WorkspaceDetailPage: React.FC = () => {
 
     // API hooks
     const { data: workspaceResponse, isLoading: workspaceLoading, error: workspaceError } = useGetWorkspaceQuery(id!);
+    console.log('WorkspaceDetailPage render, workspaceId:', workspaceResponse?.data);
     const { data: conversationsResponse } = useGetConversationsQuery(id!, { skip: !id });
+    console.log('ConversationsResponse:', conversationsResponse);
     const [createConversation] = useCreateConversationMutation();
-    const [sendMessage] = useSendMessageMutation();
     
     const workspace = workspaceResponse?.data;
     const conversations = conversationsResponse?.data || [];
@@ -147,7 +148,7 @@ export const WorkspaceDetailPage: React.FC = () => {
     const activeConversation = conversations.find(c => c.id === activeConversationId);
 
     return (
-        <div className="h-screen bg-slate-900 flex overflow-hidden">
+        <div className="h-screen bg-slate-900 flex overflow-hidden">\
             {/* Conversation Sidebar */}
             <ConversationSidebar
                 workspaceName={workspace.name}

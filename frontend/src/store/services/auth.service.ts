@@ -1,5 +1,6 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { createApi } from "@reduxjs/toolkit/query/react";
 import type { ResponseInterface } from "../../common/interfaces/ReponseInterface";
+import { baseQueryWithAuth } from "../api/baseQuery";
 
 interface AuthLoginRequest {
     email: string;
@@ -39,17 +40,7 @@ interface VerifyEmailRequest {
 
 export const authService = createApi({
     reducerPath: 'authApi',
-    baseQuery: fetchBaseQuery({
-        baseUrl: import.meta.env.VITE_API_URL || 'http://localhost:4000/api/v1',
-        prepareHeaders: (headers) => {
-            const token = localStorage.getItem('accessToken');
-            if (token) {
-                headers.set('Authorization', `Bearer ${token}`);
-            }
-            headers.set('Content-Type', 'application/json');
-            return headers;
-        }
-    }),
+    baseQuery: baseQueryWithAuth,
     tagTypes: ['Auth'],
     endpoints: (builder) => ({
         login: builder.mutation<ResponseInterface<AuthLoginResponse>, AuthLoginRequest>({

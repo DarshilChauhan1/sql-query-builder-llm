@@ -27,7 +27,6 @@ export class ConversationsController {
     @Req() request: Request
   ): Promise<Observable<MessageEvent>> {
     const userId = request['user'].id;
-
     // Validate required parameters
     if (!conversationId || !prompt) {
       return new Observable<MessageEvent>((subscriber) => {

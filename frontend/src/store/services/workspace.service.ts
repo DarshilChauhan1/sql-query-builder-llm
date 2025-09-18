@@ -1,5 +1,6 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { createApi } from "@reduxjs/toolkit/query/react";
 import type { ResponseInterface } from "../../common/interfaces/ReponseInterface";
+import { baseQueryWithAuth } from "../api/baseQuery";
 
 export interface CreateWorkspaceRequest {
     name: string;
@@ -29,17 +30,7 @@ export interface WorkspaceDetailsResponse {
 
 export const workspaceService = createApi({
     reducerPath: 'workspaceApi',
-    baseQuery: fetchBaseQuery({
-        baseUrl: import.meta.env.VITE_API_URL || 'http://localhost:4000/api/v1',
-        prepareHeaders: (headers) => {
-            const token = localStorage.getItem('accessToken');
-            if (token) {
-                headers.set('Authorization', `Bearer ${token}`);
-            }
-            headers.set('Content-Type', 'application/json');
-            return headers;
-        }
-    }),
+    baseQuery: baseQueryWithAuth,
     tagTypes: ['Workspace'],
     endpoints: (builder) => ({
         createWorkspace: builder.mutation<ResponseInterface<Workspace>, CreateWorkspaceRequest>({
