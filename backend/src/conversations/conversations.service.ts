@@ -235,9 +235,8 @@ export class ConversationsService {
           conversationId,
           userId,
           role: 'assistant',
-          prompt: fullResponse,
           sqlQuery,
-          queryResult: JSON.stringify(queryResults),
+          assistantResponse: fullResponse,
           messageId: messageCount + 1
         }
       });
@@ -248,28 +247,6 @@ export class ConversationsService {
       console.error('Stream processing error:', error);
       
       // Try to save error state if user message was created
-      if (userMessage) {
-        try {
-          const errorMessageCount = await this.prisma.messages.count({
-            where: { conversationId }
-          });
-
-          await this.prisma.messages.create({
-            data: {
-              conversationId,
-              userId,
-              role: 'assistant',
-              prompt: 'Sorry, I encountered an error processing your request. Please try again.',
-              sqlQuery: sqlQuery || '',
-              queryResult: JSON.stringify({ error: error.message }),
-              messageId: errorMessageCount
-            }
-          });
-        } catch (saveError) {
-          console.error('Failed to save error message:', saveError);
-        }
-      }
-
       subscriber.error(error);
     }
   }
@@ -586,6 +563,7 @@ export class ConversationsService {
   // Additional helper methods for better conversation management
   async getConversationsByWorkspace(workspaceId: string, userId: string) {
     try {
+      console.log("Api Called")
       // Verify user owns the workspace
       const workspace = await this.prisma.workspace.findUnique({
         where: { id: workspaceId, userId: userId }
@@ -597,19 +575,9 @@ export class ConversationsService {
 
       const conversations = await this.prisma.conversation.findMany({
         where: { workspaceId: workspaceId },
-        orderBy: { id: 'desc' },
-        include: {
-          messages: {
-            take: 1,
-            orderBy: { createdAt: 'desc' },
-            select: {
-              prompt: true,
-              role: true,
-              createdAt: true
-            }
-          }
-        }
+        orderBy : { createdAt : 'asc'}
       });
+      console.log(conversations)
 
       return new ResponseHandler('Conversations retrieved successfully', 200, true, conversations);
     } catch (error) {
@@ -637,7 +605,7 @@ export class ConversationsService {
               prompt: true,
               role: true,
               sqlQuery: true,
-              queryResult: true,
+              assistantResponse: true,
               createdAt: true,
               messageId: true
             }
@@ -645,11 +613,24 @@ export class ConversationsService {
         }
       });
 
+      const messages = conversation?.messages.map(msg => {
+        return {
+          id : msg.id,
+          role : msg.role,
+          userQuery : msg.prompt,
+          sqlQuery : msg.sqlQuery,
+          assistantResponse : msg.assistantResponse,
+          createdAt : msg.createdAt,
+          messageId : msg.messageId
+        }
+      })
+      console.log(messages)
+
       if (!conversation) {
         throw new NotFoundException('Conversation not found or access denied');
       }
 
-      return new ResponseHandler('Messages retrieved successfully', 200, true, conversation.messages);
+      return new ResponseHandler('Messages retrieved successfully', 200, true, messages);
     } catch (error) {
       console.error('Error fetching messages:', error);
       if (error instanceof NotFoundException) {

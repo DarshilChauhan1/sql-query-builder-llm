@@ -36,32 +36,39 @@ export interface CreateConversationResponse {
     prompt: string;
 }
 
+export interface GetMessagesRequest{
+    conversationId: string;
+}
+
+export interface GetMessagesResponse{
+    id : string;
+    role : 'user' | 'assistant';
+    userQuery : string;
+    assistantResponse? : string;
+    sqlQuery? : string;
+    queryResult? : string;
+    createdAt : string;
+}
+
 export const conversationService = createApi({
     reducerPath: 'conversationApi',
     baseQuery: baseQueryWithAuth,
-    tagTypes: ['Conversation', 'Message'],
+    tagTypes: ['Chat', 'Message'],
     endpoints: (builder) => ({
         getConversations: builder.query<ResponseInterface<Conversation[]>, string>({
             query: (workspaceId) => ({
-                url: `/conversations?workspaceId=${workspaceId}`,
+                url: `/chat/get-conversations/${workspaceId}`,
                 method: 'GET',
             }),
-            providesTags: ['Conversation']
-        }),
-        getConversation: builder.query<ResponseInterface<Conversation>, string>({
-            query: (conversationId) => ({
-                url: `/conversations/${conversationId}`,
-                method: 'GET',
-            }),
-            providesTags: (_, __, id) => [{ type: 'Conversation', id }]
+            providesTags: ['Chat']
         }),
         createConversation: builder.mutation<ResponseInterface<CreateConversationResponse>, CreateConversationRequest>({
             query: (payload) => ({
-                url: '/conversations/create',
+                url: '/chat/create',
                 method: 'POST',
                 body: payload,
             }),
-            invalidatesTags: ['Conversation']
+            invalidatesTags: ['Chat']
         }),
         sendMessage: builder.mutation<ResponseInterface<Message>, SendMessageRequest>({
             query: (payload) => ({
@@ -70,24 +77,31 @@ export const conversationService = createApi({
                 body: payload,
             }),
             invalidatesTags: (_, __, { conversationId }) => [
-                { type: 'Conversation', id: conversationId },
+                { type: 'Chat', id: conversationId },
                 'Message'
             ]
         }),
         deleteConversation: builder.mutation<ResponseInterface<void>, string>({
             query: (conversationId) => ({
-                url: `/conversations/${conversationId}`,
+                url: `/chat/${conversationId}`,
                 method: 'DELETE',
             }),
-            invalidatesTags: ['Conversation']
+            invalidatesTags: ['Chat']
+        }),
+        getMessages : builder.mutation<ResponseInterface<GetMessagesResponse[]>, string>({
+            query : (conversationId) => ({
+                url : `/chat/get-messages/${conversationId}`,
+                method : 'GET',
+            }),
+            invalidatesTags : ['Message']
         })
     })
 });
 
 export const {
     useGetConversationsQuery,
-    useGetConversationQuery,
     useCreateConversationMutation,
     useSendMessageMutation,
-    useDeleteConversationMutation
+    useDeleteConversationMutation,
+    useGetMessagesMutation
 } = conversationService;

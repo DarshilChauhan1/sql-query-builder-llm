@@ -30,6 +30,7 @@ model User {
   password   String
   workspaces Workspace[]
   isVerified   Boolean        @default(false)
+  refreshToken String?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   Conversation Conversation[]
@@ -68,6 +69,8 @@ model Conversation {
   user        User       @relation(fields: [userId], references: [id])
   messages    Messages[]
   workspace   Workspace  @relation(fields: [workspaceId], references: [id])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt @default(now())
 }
 
 model Messages {
@@ -79,7 +82,7 @@ model Messages {
   role           ChatRole
   sqlQuery       String ?
   prompt         String ?
-  queryResult    String ?
+  assistantResponse String ?
   messageId      Int
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt

@@ -2,7 +2,7 @@ import { configureStore } from "@reduxjs/toolkit";
 import authReducer from "./slices/auth.slice";
 import { authService } from "./services/auth.service";
 import { workspaceService } from "./services/workspace.service";
-import { conversationService } from "./services/conversation.service";
+import { conversationService } from "./services/chat.service";
 
 export const store = configureStore({
     reducer: {

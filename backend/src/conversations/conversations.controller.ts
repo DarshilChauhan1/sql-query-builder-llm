@@ -8,7 +8,7 @@ import { map, Observable, catchError, of } from 'rxjs';
 import { CreateMessageStreamDto } from './dto/create-message-stream.dto';
 import { StreamEventData, SSEMessageEvent } from './types/stream-events.types';
 
-@Controller('conversations')
+@Controller('chat')
 @UseGuards(JwtAuthGuard)
 export class ConversationsController {
   constructor(private readonly conversationsService: ConversationsService) { }
@@ -20,7 +20,7 @@ export class ConversationsController {
       .create(createConversationDto, userId)
   }
 
-  @Sse('chat-stream')
+  @Sse('stream')
   async createMessageStream(
     @Query('conversationId') conversationId: string,
     @Query('prompt') prompt: string,
@@ -85,14 +85,14 @@ export class ConversationsController {
     }
   }
 
-  @Get('workspace/:workspaceId')
+  @Get('get-conversations/:workspaceId')
   getConversationsByWorkspace(@Param('workspaceId') workspaceId: string, @Req() req: Request) {
     const userId = req['user'].id;
     return this.conversationsService.getConversationsByWorkspace(workspaceId, userId);
   }
 
-  @Get(':id/messages')
-  getMessages(@Param('id') conversationId: string, @Req() req: Request) {
+  @Get('get-messages/:conversationId')
+  getMessages(@Param('conversationId') conversationId: string, @Req() req: Request) {
     const userId = req['user'].id;
     return this.conversationsService.getMessages(conversationId, userId);
   }

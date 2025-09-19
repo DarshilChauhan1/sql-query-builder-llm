@@ -8,10 +8,17 @@ interface Conversation {
     isActive?: boolean;
 }
 
+interface PendingConversation {
+    id: string;
+    title: string;
+    isLoading: boolean;
+}
+
 interface ConversationSidebarProps {
     workspaceName: string;
     conversations: Conversation[];
     activeConversationId?: string;
+    pendingConversation?: PendingConversation | null;
     onNewChat: () => void;
     onSelectConversation: (conversationId: string) => void;
 }
@@ -20,10 +27,12 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
     workspaceName,
     conversations,
     activeConversationId,
+    pendingConversation,
     onNewChat,
     onSelectConversation
 }) => {
     const navigate = useNavigate();
+    console.log('Rendering ConversationSidebar with conversations:', conversations);
 
     const formatDate = (dateString: string) => {
         const date = new Date(dateString);
@@ -68,7 +77,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
 
             {/* Conversations List */}
             <div className="flex-1 overflow-y-auto p-2">
-                {conversations.length === 0 ? (
+                {conversations.length === 0 && !pendingConversation ? (
                     <div className="text-center py-8">
                         <div className="text-slate-400 mb-2">
                             <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -80,6 +89,26 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
                     </div>
                 ) : (
                     <div className="space-y-1">
+                        {/* Pending Conversation */}
+                        {pendingConversation && (
+                            <div
+                                className={`w-full text-left p-3 rounded-lg bg-slate-700 text-slate-100 border border-blue-500/30`}
+                            >
+                                <div className="flex items-start justify-between">
+                                    <div className="flex-1 min-w-0">
+                                        <h4 className="text-sm font-medium truncate mb-1">
+                                            {pendingConversation.title}
+                                        </h4>
+                                        <div className="flex items-center space-x-2">
+                                            <div className="animate-spin h-3 w-3 border border-blue-400 rounded-full border-t-transparent"></div>
+                                            <p className="text-xs text-blue-400">Creating conversation...</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {/* Regular Conversations */}
                         {conversations.map((conversation) => (
                             <button
                                 key={conversation.id}
